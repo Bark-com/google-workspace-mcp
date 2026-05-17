@@ -445,6 +445,12 @@ def main():
         "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": os.getenv(
             "GOOGLE_SERVICE_ACCOUNT_KEY_FILE", "Not Set"
         ),
+        "GOOGLE_APPLICATION_CREDENTIALS": os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS", "Not Set"
+        ),
+        "GOOGLE_SERVICE_ACCOUNT_EMAIL": os.getenv(
+            "GOOGLE_SERVICE_ACCOUNT_EMAIL", "Not Set"
+        ),
     }
 
     for key, value in config_vars.items():

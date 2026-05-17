@@ -74,6 +74,7 @@ class OAuthConfig:
             )
         self.service_account_enabled = bool(
             self.service_account_key_file or self.service_account_key_json
+            or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         )
         if self.service_account_enabled and self.oauth21_enabled:
             raise ValueError(
