@@ -1,0 +1,110 @@
+name: deploy
+run-name: ${{ inputs.environment || 'platform' }} (${{ github.ref_name }} deployed by @${{ github.actor }}
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: environment
+        description: 'Environment to deploy to'
+        required: true
+
+# Permission can be added at job level or workflow level
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: write    # This is required for actions/checkout
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'platform' }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref_name }}
+      cancel-in-progress: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.branch || github.ref_name }}
+
+    - name: configure aws credentials
+      uses: aws-actions/configure-aws-credentials@v1.7.0
+      with:
+        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ex-iam-github-oidc-${{ vars.ENVIRONMENT || 'platform' }}
+        role-session-name: GitHub_to_AWS_via_FederatedOIDC
+        aws-region: ${{ vars.AWS_REGION }}
+      if: github.event_name != 'pull_request'
+
+    - name: get app repository name
+      run: echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+      if: github.event_name != 'pull_request'
+
+    - name: get github run number
+      run: echo "RUN_NUMBER=$GITHUB_RUN_NUMBER" >> $GITHUB_ENV
+      if: github.event_name != 'pull_request'
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+      if: github.event_name != 'pull_request'
+
+    - name: Login to GHCR Docker
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build, tag, and push app image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        APP_NAME: ${{ env.REPOSITORY_NAME }}
+        DOCKER_BUILDKIT: 1
+      run: |
+        docker build . \
+          --tag $ECR_REGISTRY/$APP_NAME:app-$GITHUB_RUN_NUMBER-${{ github.sha }} \
+          --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+          --label org.opencontainers.image.source=$(git config --get remote.origin.url)
+
+        docker push \
+          $ECR_REGISTRY/$APP_NAME:app-$GITHUB_RUN_NUMBER-${{ github.sha }}
+
+      if: github.event_name != 'pull_request'
+
+    # - name: Generate a token
+    #   id: generate_token
+    #   uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+    #   with:
+    #     app_id: ${{ secrets.GH_APP_ID }}
+    #     private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+    # - name: Invoke Infra GitOps pipeline
+    #   env:
+    #     GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+    #   run: |
+    #     curl -H "Accept: application/vnd.github.everest-preview+json"  -H "Authorization: token $GITHUB_TOKEN" --request POST --data '{"event_type": "deploy-helm-chart", "client_payload": { "APP_NAME": "${{ env.REPOSITORY_NAME }}", "TAG": "${{ env.RUN_NUMBER }}-${{ github.sha }}", "ENVIRONMENT": "${{ vars.ENVIRONMENT || 'platform' }}" }}'  https://api.github.com/repos/Bark-com/bark-helm-deployments/dispatches
+    #   if: github.event_name != 'pull_request'
+
+    # # Post-deployment summary
+    # - name: get slack channel info
+    #   run: |
+    #     if [ "${{ vars.ENVIRONMENT }}" = "production" ]; then
+    #       echo "SLACK_CHANNEL=#develop-releases" >> $GITHUB_ENV
+    #     else
+    #       echo "SLACK_CHANNEL=#tech-env-deployment" >> $GITHUB_ENV
+    #     fi
+    #   if: github.event_name != 'pull_request'
+
+    # - name: Add post-deployment summary
+    #   if: success() && github.event_name != 'pull_request'
+    #   run: |    
+    #     echo "🎉 **GitHub Actions for the ArgoCD sync have been triggered!**" >> $GITHUB_STEP_SUMMARY
+    #     echo "" >> $GITHUB_STEP_SUMMARY
+    #     echo "- 🚀 Visit (https://argocd.${{ vars.ENVIRONMENT }}.barkenvs.systems/applications/argocd/${{ env.REPOSITORY_NAME }}) to view the status of the deployment or check \`${{ env.SLACK_CHANNEL }}\` channel for the status." >> $GITHUB_STEP_SUMMARY
+    #     echo "" >> $GITHUB_STEP_SUMMARY
+    #     echo "- 🚀 Datadog live tail logs: (https://app.datadoghq.eu/logs/livetail?query=env%3A${{ inputs.environment || 'platform' }}%20service%3A${{ env.REPOSITORY_NAME }}%20&agg_m=count&agg_m_source=base&agg_t=count&cols=host%2Cservice&fromUser=true&messageDisplay=inline&refresh_mode=sliding&storage=live&stream_sort=desc&viz=stream&from_ts=1727348161599&to_ts=1727349061599&live=true)" >> $GITHUB_STEP_SUMMARY
+    #     echo "" >> $GITHUB_STEP_SUMMARY
+    #     echo "- 🚀 Datadog APM traces for monitoring errors & latancy: (https://app.datadoghq.eu/apm/traces?query=env%3A${{ inputs.environment || 'platform' }}%20service%3A${{ env.REPOSITORY_NAME }}&agg_m=count&agg_m_source=base&agg_t=count&cols=core_service%2Ccore_resource_name%2Clog_duration%2Clog_http.method%2Clog_http.status_code&fromUser=false&historicalData=true&messageDisplay=inline&query_translation_version=v0&sort=desc&spanType=all&storage=hot&traceGroup=&view=spans&start=1727348695221&end=1727349595221&paused=false)" >> $GITHUB_STEP_SUMMARY
