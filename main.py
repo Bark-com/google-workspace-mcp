@@ -631,11 +631,14 @@ def main():
             # No local key file to validate — confirm the config file at least exists.
             _wif_cfg_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if not os.path.isfile(_wif_cfg_path):
-                safe_print(f"❌ GOOGLE_APPLICATION_CREDENTIALS file not found: {_wif_cfg_path}")
+                logger.error("WIF+DWD startup error: GOOGLE_APPLICATION_CREDENTIALS file not found: %s", _wif_cfg_path)
                 sys.exit(1)
             if not os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"):
-                safe_print("❌ WIF mode requires GOOGLE_SERVICE_ACCOUNT_EMAIL to be set")
+                logger.error("WIF+DWD startup error: GOOGLE_SERVICE_ACCOUNT_EMAIL must be set when GOOGLE_APPLICATION_CREDENTIALS is configured")
                 sys.exit(1)
+            logger.info("WIF+DWD mode enabled (Workload Identity Federation)")
+            logger.info("  WIF config: %s", _wif_cfg_path)
+            logger.info("  SA email:   %s", os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
             safe_print("🔐 WIF + DWD mode enabled (Workload Identity Federation)")
             safe_print(f"   WIF config: {_wif_cfg_path}")
             safe_print(f"   SA email:   {os.getenv('GOOGLE_SERVICE_ACCOUNT_EMAIL')}")
