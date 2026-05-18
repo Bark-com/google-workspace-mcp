@@ -494,3 +494,20 @@ def is_external_oauth21_provider() -> bool:
 def is_service_account_enabled() -> bool:
     """Check if service account (domain-wide delegation) mode is enabled."""
     return get_oauth_config().is_service_account_enabled()
+
+
+def is_wif_dwd_mode() -> bool:
+    """Return True when running with Workload Identity Federation + DWD (keyless auth).
+
+    WIF+DWD uses GOOGLE_APPLICATION_CREDENTIALS (a WIF config file) plus
+    GOOGLE_SERVICE_ACCOUNT_EMAIL for impersonation, rather than a SA key file.
+    In this mode the impersonation target is always caller-supplied per request,
+    so USER_GOOGLE_EMAIL must not be used as a global default or server instruction.
+    """
+    config = get_oauth_config()
+    return (
+        bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+        and not config.service_account_key_file
+        and not config.service_account_key_json
+        and bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+    )

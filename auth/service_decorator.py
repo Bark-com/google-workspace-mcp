@@ -305,17 +305,20 @@ async def _authenticate_service(
         Tuple of (service, actual_user_email)
     """
     if is_service_account_enabled():
-        canonical_email = _get_configured_user_google_email()
-        if not canonical_email:
-            raise GoogleAuthenticationError(
-                "Service account mode requires USER_GOOGLE_EMAIL to be configured."
-            )
-
         config = get_oauth_config()
         if user_google_email:
             _validate_dwd_domain(user_google_email, config)
             target_email = user_google_email
         else:
+            # Fall back to USER_GOOGLE_EMAIL for single-user SA deployments.
+            # In WIF+DWD mode this will be None (disabled), so callers must
+            # always supply user_google_email explicitly.
+            canonical_email = _get_configured_user_google_email()
+            if not canonical_email:
+                raise GoogleAuthenticationError(
+                    "Service account mode requires USER_GOOGLE_EMAIL to be configured "
+                    "(or pass user_google_email explicitly on each call)."
+                )
             target_email = canonical_email
 
         credentials = _get_service_account_credentials(resolved_scopes, target_email)

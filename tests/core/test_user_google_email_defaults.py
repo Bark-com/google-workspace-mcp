@@ -187,12 +187,22 @@ async def test_authenticate_service_account_uses_caller_email(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_service_account_raises_without_configured_user(
+async def test_authenticate_service_account_raises_when_both_emails_absent(
     monkeypatch,
 ):
+    """Error is raised only when user_google_email is blank AND USER_GOOGLE_EMAIL is unset."""
     monkeypatch.setattr(service_decorator, "_ENV_USER_EMAIL", None)
     monkeypatch.delenv("USER_GOOGLE_EMAIL", raising=False)
     monkeypatch.setattr(service_decorator, "is_service_account_enabled", lambda: True)
+    monkeypatch.setattr(
+        service_decorator,
+        "get_oauth_config",
+        lambda: SimpleNamespace(
+            service_account_key_file=None,
+            service_account_key_json=None,
+            dwd_allowed_domains=[],
+        ),
+    )
 
     with pytest.raises(
         service_decorator.GoogleAuthenticationError,
@@ -203,11 +213,60 @@ async def test_authenticate_service_account_raises_without_configured_user(
             service_name="gmail",
             service_version="v1",
             tool_name="sample_tool",
-            user_google_email="caller@example.com",
+            user_google_email="",
             resolved_scopes=["scope-a"],
             mcp_session_id=None,
             authenticated_user=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_authenticate_service_account_succeeds_with_caller_email_and_no_env(
+    monkeypatch,
+):
+    """In WIF+DWD mode USER_GOOGLE_EMAIL is unset; caller-supplied email must be enough."""
+    monkeypatch.setattr(service_decorator, "_ENV_USER_EMAIL", None)
+    monkeypatch.delenv("USER_GOOGLE_EMAIL", raising=False)
+    monkeypatch.setattr(service_decorator, "is_service_account_enabled", lambda: True)
+
+    captured = {}
+    fake_service = object()
+    fake_credentials = object()
+
+    monkeypatch.setattr(
+        service_decorator,
+        "get_oauth_config",
+        lambda: SimpleNamespace(
+            service_account_key_file=None,
+            service_account_key_json=None,
+            dwd_allowed_domains=[],
+        ),
+    )
+    monkeypatch.setattr(
+        service_decorator,
+        "_get_service_account_credentials",
+        lambda scopes, subject: (captured.update({"subject": subject}), fake_credentials)[1],
+    )
+    monkeypatch.setattr(
+        service_decorator,
+        "build",
+        lambda svc, ver, credentials: fake_service,
+    )
+
+    service, actual_user = await service_decorator._authenticate_service(
+        use_oauth21=False,
+        service_name="gmail",
+        service_version="v1",
+        tool_name="sample_tool",
+        user_google_email="marshall.davies@bark.com",
+        resolved_scopes=["scope-a"],
+        mcp_session_id=None,
+        authenticated_user=None,
+    )
+
+    assert service is fake_service
+    assert actual_user == "marshall.davies@bark.com"
+    assert captured["subject"] == "marshall.davies@bark.com"
 
 
 # --- DWD per-request impersonation tests ---
@@ -328,3 +387,63 @@ async def test_dwd_request_impersonation_domain_allowlist_rejects(monkeypatch):
             mcp_session_id=None,
             authenticated_user=None,
         )
+
+
+# --- WIF+DWD mode: server schema and instructions suppression ---
+
+
+@pytest.mark.asyncio
+async def test_list_tools_does_not_patch_schema_in_wif_dwd_mode(monkeypatch):
+    """In WIF+DWD mode USER_GOOGLE_EMAIL is None; user_google_email stays required."""
+    monkeypatch.setattr(server_module, "USER_GOOGLE_EMAIL", None)
+    monkeypatch.setattr(server_module, "is_oauth21_enabled", lambda: False)
+
+    server = SecureFastMCP(name="test_wif_server")
+
+    def echo_email(user_google_email: str) -> str:
+        return user_google_email
+
+    server.tool()(echo_email)
+
+    tool = next(
+        t
+        for t in await server.list_tools(run_middleware=False)
+        if t.name == "echo_email"
+    )
+
+    assert "user_google_email" in tool.parameters.get("required", [])
+    assert tool.parameters["properties"]["user_google_email"].get("default") is None
+
+
+@pytest.mark.asyncio
+async def test_call_tool_does_not_inject_wrong_email_in_wif_dwd_mode(monkeypatch):
+    """In WIF+DWD mode the server must not silently inject USER_GOOGLE_EMAIL into calls."""
+    monkeypatch.setattr(server_module, "USER_GOOGLE_EMAIL", None)
+    monkeypatch.setattr(server_module, "is_oauth21_enabled", lambda: False)
+
+    server = SecureFastMCP(name="test_wif_server")
+    received = {}
+
+    def capture_email(user_google_email: str) -> str:
+        received["email"] = user_google_email
+        return user_google_email
+
+    server.tool()(capture_email)
+
+    await server.call_tool("capture_email", {"user_google_email": "marshall.davies@bark.com"})
+
+    assert received["email"] == "marshall.davies@bark.com"
+
+
+@pytest.mark.asyncio
+async def test_server_instructions_absent_in_wif_dwd_mode(monkeypatch):
+    """When USER_GOOGLE_EMAIL is None the server must emit no 'Connected account' instructions."""
+    monkeypatch.setattr(server_module, "USER_GOOGLE_EMAIL", None)
+
+    server = SecureFastMCP(name="test_wif_server")
+
+    init_result = await server.list_tools(run_middleware=False)
+
+    assert server.instructions is None or "Connected Google account" not in (
+        server.instructions or ""
+    )
