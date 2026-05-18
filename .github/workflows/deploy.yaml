@@ -65,7 +65,7 @@ jobs:
         DOCKER_BUILDKIT: 1
       run: |
         docker build . \
-          --tag $ECR_REGISTRY/$APP_NAME:app-$GITHUB_RUN_NUMBER-${{ github.sha }} \
+          --tag $ECR_REGISTRY/$APP_NAME:mcp-$GITHUB_RUN_NUMBER-${{ github.sha }} \
           --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
           --label org.opencontainers.image.source=$(git config --get remote.origin.url)
 
