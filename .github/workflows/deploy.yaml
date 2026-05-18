@@ -70,7 +70,7 @@ jobs:
           --label org.opencontainers.image.source=$(git config --get remote.origin.url)
 
         docker push \
-          $ECR_REGISTRY/$APP_NAME:app-$GITHUB_RUN_NUMBER-${{ github.sha }}
+          $ECR_REGISTRY/$APP_NAME:mcp-$GITHUB_RUN_NUMBER-${{ github.sha }}
 
       if: github.event_name != 'pull_request'
 
