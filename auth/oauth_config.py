@@ -58,9 +58,18 @@ class OAuthConfig:
         self.stateless_mode = (
             os.getenv("WORKSPACE_MCP_STATELESS_MODE", "false").lower() == "true"
         )
-        if self.stateless_mode and not self.oauth21_enabled:
+        # WIF+DWD is detected inline here because service_account_key_file is
+        # not yet assigned at this point in __init__.
+        _wif_dwd_early = (
+            bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+            and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE")
+            and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_JSON")
+            and bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+        )
+        if self.stateless_mode and not self.oauth21_enabled and not _wif_dwd_early:
             raise ValueError(
-                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true"
+                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true "
+                "or WIF+DWD mode (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_SERVICE_ACCOUNT_EMAIL)"
             )
 
         # Service account (domain-wide delegation) configuration
