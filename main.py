@@ -615,17 +615,20 @@ def main():
 
     # Service account mode startup validation
     if is_service_account_enabled():
-        user_email = os.getenv("USER_GOOGLE_EMAIL")
-        if not user_email:
-            safe_print("❌ Service account mode requires USER_GOOGLE_EMAIL to be set")
-            safe_print("   Set USER_GOOGLE_EMAIL to the domain user to impersonate")
-            sys.exit(1)
         sa_config = get_oauth_config()
         _wif_mode = (
             os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             and not sa_config.service_account_key_file
             and not sa_config.service_account_key_json
         )
+        if not _wif_mode:
+            # Traditional SA key-file/JSON mode: USER_GOOGLE_EMAIL is the single
+            # impersonation target and must be configured upfront.
+            user_email = os.getenv("USER_GOOGLE_EMAIL")
+            if not user_email:
+                safe_print("❌ Service account mode requires USER_GOOGLE_EMAIL to be set")
+                safe_print("   Set USER_GOOGLE_EMAIL to the domain user to impersonate")
+                sys.exit(1)
         if _wif_mode:
             # WIF mode: key material lives in the wif-config.json + GCP STS exchange.
             # No local key file to validate — confirm the config file at least exists.
