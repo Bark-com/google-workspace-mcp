@@ -677,7 +677,7 @@ def main():
                 safe_print(f"❌ Failed to read service account key: {e}")
                 sys.exit(1)
             safe_print("🔐 Service account mode enabled (domain-wide delegation)")
-        safe_print(f"   Impersonating: {user_email}")
+            safe_print(f"   Impersonating: {user_email}")
         safe_print("")
 
     backend = get_selected_backend()
