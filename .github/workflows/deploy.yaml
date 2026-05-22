@@ -65,12 +65,12 @@ jobs:
         DOCKER_BUILDKIT: 1
       run: |
         docker build . \
-          --tag $ECR_REGISTRY/$APP_NAME:mcp-$GITHUB_RUN_NUMBER-${{ github.sha }} \
+          --tag $ECR_REGISTRY/$APP_NAME:mcp-${{ github.sha }} \
           --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
           --label org.opencontainers.image.source=$(git config --get remote.origin.url)
 
         docker push \
-          $ECR_REGISTRY/$APP_NAME:mcp-$GITHUB_RUN_NUMBER-${{ github.sha }}
+          $ECR_REGISTRY/$APP_NAME:mcp-${{ github.sha }}
 
       if: github.event_name != 'pull_request'
 
@@ -91,7 +91,7 @@ jobs:
           {
             "app_name": "${{ env.REPOSITORY_NAME }}",
             "replacements": [
-              ".mcpSidecar.image.tag=\"mcp-$GITHUB_RUN_NUMBER-${{ github.sha }}\"",
+              ".mcpSidecar.image.tag=\"mcp-${{ github.sha }}\"",
             ],
             "message": "Deploying ${{ env.REPOSITORY_NAME }} from branch ${{ github.ref_name }}. (${{ github.actor }})"
           }
