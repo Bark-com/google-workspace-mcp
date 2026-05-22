@@ -74,24 +74,24 @@ jobs:
 
       if: github.event_name != 'pull_request'
 
-    # - name: Generate a token
-    #   id: generate_token
-    #   uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
-    #   with:
-    #     app_id: ${{ secrets.GH_APP_ID }}
-    #     private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+    - name: Generate a token
+      id: generate_token
+      uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+      with:
+        app_id: ${{ secrets.GH_APP_ID }}
+        private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-    # - name: Invoke Infra GitOps pipeline
-    #   uses: peter-evans/repository-dispatch@v3
-    #   with:
-    #     token: ${{ steps.generate_token.outputs.token }}
-    #     repository: Bark-com/helm-charts
-    #     event-type: deploy-helm-chart
-    #     client-payload: |-
-    #       {
-    #         "app_name": "${{ env.REPOSITORY_NAME }}",
-    #         "replacements": [
-    #           ".mcpSidecar.image.tag=\"mcp-$GITHUB_RUN_NUMBER-${{ github.sha }}\"",
-    #         ],
-    #         "message": "Deploying ${{ env.REPOSITORY_NAME }} from branch ${{ github.ref_name }}. (${{ github.actor }})"
-    #       }
+    - name: Invoke Infra GitOps pipeline
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ steps.generate_token.outputs.token }}
+        repository: Bark-com/helm-charts
+        event-type: deploy-helm-chart
+        client-payload: |-
+          {
+            "app_name": "${{ env.REPOSITORY_NAME }}",
+            "replacements": [
+              ".mcpSidecar.image.tag=\"mcp-$GITHUB_RUN_NUMBER-${{ github.sha }}\"",
+            ],
+            "message": "Deploying ${{ env.REPOSITORY_NAME }} from branch ${{ github.ref_name }}. (${{ github.actor }})"
+          }
