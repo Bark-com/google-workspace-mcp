@@ -91,7 +91,7 @@ jobs:
           {
             "app_name": "${{ env.REPOSITORY_NAME }}",
             "replacements": [
-              ".mcpSidecar.image.tag=\"mcp-${{ github.sha }}\"",
+              ".mcpSidecar.image.tag=\"mcp-${{ github.sha }}\""
             ],
             "message": "Deploying ${{ env.REPOSITORY_NAME }} from branch ${{ github.ref_name }}. (${{ github.actor }})"
           }
