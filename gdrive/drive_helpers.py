@@ -335,6 +335,13 @@ async def resolve_drive_item(
     Returns the resolved file ID and its metadata. Raises if shortcut targets loop
     or exceed max_depth to avoid infinite recursion.
     """
+    # "root" is a Drive API alias — files().get("root") can 404 on Workspace
+    # shared-drive accounts where "root" resolves to a shared drive ID that
+    # isn't accessible via the files endpoint. It's valid as a parent in
+    # files().create() without resolution.
+    if file_id == "root":
+        return "root", {"mimeType": FOLDER_MIME_TYPE}
+
     current_id = file_id
     depth = 0
     fields = BASE_SHORTCUT_FIELDS
