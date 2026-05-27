@@ -245,7 +245,10 @@ async def test_authenticate_service_account_succeeds_with_caller_email_and_no_en
     monkeypatch.setattr(
         service_decorator,
         "_get_service_account_credentials",
-        lambda scopes, subject: (captured.update({"subject": subject}), fake_credentials)[1],
+        lambda scopes, subject: (
+            captured.update({"subject": subject}),
+            fake_credentials,
+        )[1],
     )
     monkeypatch.setattr(
         service_decorator,
@@ -430,7 +433,9 @@ async def test_call_tool_does_not_inject_wrong_email_in_wif_dwd_mode(monkeypatch
 
     server.tool()(capture_email)
 
-    await server.call_tool("capture_email", {"user_google_email": "marshall.davies@bark.com"})
+    await server.call_tool(
+        "capture_email", {"user_google_email": "marshall.davies@bark.com"}
+    )
 
     assert received["email"] == "marshall.davies@bark.com"
 
@@ -442,7 +447,7 @@ async def test_server_instructions_absent_in_wif_dwd_mode(monkeypatch):
 
     server = SecureFastMCP(name="test_wif_server")
 
-    init_result = await server.list_tools(run_middleware=False)
+    await server.list_tools(run_middleware=False)
 
     assert server.instructions is None or "Connected Google account" not in (
         server.instructions or ""

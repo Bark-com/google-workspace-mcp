@@ -2,8 +2,6 @@
 
 from types import SimpleNamespace
 
-import pytest
-
 import auth.oauth_config as oauth_config_module
 from auth.oauth_config import is_wif_dwd_mode
 
