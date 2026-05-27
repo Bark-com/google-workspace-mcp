@@ -27,7 +27,9 @@ WORKSPACE_EXTERNAL_URL = os.getenv("WORKSPACE_EXTERNAL_URL")
 # default would silently impersonate the wrong account and mislead the LLM
 # with incorrect server instructions.
 USER_GOOGLE_EMAIL = (
-    None if (is_oauth21_enabled() or is_wif_dwd_mode()) else os.getenv("USER_GOOGLE_EMAIL", None)
+    None
+    if (is_oauth21_enabled() or is_wif_dwd_mode())
+    else os.getenv("USER_GOOGLE_EMAIL", None)
 )
 
 # Re-export OAuth functions for backward compatibility

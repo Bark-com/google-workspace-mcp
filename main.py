@@ -626,7 +626,9 @@ def main():
             # impersonation target and must be configured upfront.
             user_email = os.getenv("USER_GOOGLE_EMAIL")
             if not user_email:
-                safe_print("❌ Service account mode requires USER_GOOGLE_EMAIL to be set")
+                safe_print(
+                    "❌ Service account mode requires USER_GOOGLE_EMAIL to be set"
+                )
                 safe_print("   Set USER_GOOGLE_EMAIL to the domain user to impersonate")
                 sys.exit(1)
         if _wif_mode:
@@ -634,10 +636,15 @@ def main():
             # No local key file to validate — confirm the config file at least exists.
             _wif_cfg_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if not os.path.isfile(_wif_cfg_path):
-                logger.error("WIF+DWD startup error: GOOGLE_APPLICATION_CREDENTIALS file not found: %s", _wif_cfg_path)
+                logger.error(
+                    "WIF+DWD startup error: GOOGLE_APPLICATION_CREDENTIALS file not found: %s",
+                    _wif_cfg_path,
+                )
                 sys.exit(1)
             if not os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"):
-                logger.error("WIF+DWD startup error: GOOGLE_SERVICE_ACCOUNT_EMAIL must be set when GOOGLE_APPLICATION_CREDENTIALS is configured")
+                logger.error(
+                    "WIF+DWD startup error: GOOGLE_SERVICE_ACCOUNT_EMAIL must be set when GOOGLE_APPLICATION_CREDENTIALS is configured"
+                )
                 sys.exit(1)
             logger.info("WIF+DWD mode enabled (Workload Identity Federation)")
             logger.info("  WIF config: %s", _wif_cfg_path)

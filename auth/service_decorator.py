@@ -227,9 +227,13 @@ def _get_service_account_credentials(
         # WIF + DWD path for EKS Workload Identity Federation
         # Uses GOOGLE_APPLICATION_CREDENTIALS (wif-config.json) + GOOGLE_SERVICE_ACCOUNT_EMAIL
         # instead of a SA key file, enabling keyless auth from EKS via GCP WIF
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") and not config.service_account_key_file:
+        if (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+            and not config.service_account_key_file
+        ):
             import google.auth as _google_auth
             from google.auth import impersonated_credentials as _imp_creds
+
             _source_creds, _ = _google_auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
@@ -244,7 +248,7 @@ def _get_service_account_credentials(
                 target_principal=_sa_email,
                 target_scopes=scopes,
                 subject=subject,
-                lifetime=3600
+                lifetime=3600,
             )
         if config.service_account_key_file:
             return google_service_account.Credentials.from_service_account_file(
