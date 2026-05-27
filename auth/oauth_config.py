@@ -58,9 +58,18 @@ class OAuthConfig:
         self.stateless_mode = (
             os.getenv("WORKSPACE_MCP_STATELESS_MODE", "false").lower() == "true"
         )
-        if self.stateless_mode and not self.oauth21_enabled:
+        # WIF+DWD is detected inline here because service_account_key_file is
+        # not yet assigned at this point in __init__.
+        _wif_dwd_early = (
+            bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+            and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE")
+            and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_JSON")
+            and bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+        )
+        if self.stateless_mode and not self.oauth21_enabled and not _wif_dwd_early:
             raise ValueError(
-                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true"
+                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true "
+                "or WIF+DWD mode (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_SERVICE_ACCOUNT_EMAIL)"
             )
 
         # Service account (domain-wide delegation) configuration
@@ -73,7 +82,9 @@ class OAuthConfig:
                 "GOOGLE_SERVICE_ACCOUNT_KEY_JSON, not both."
             )
         self.service_account_enabled = bool(
-            self.service_account_key_file or self.service_account_key_json
+            self.service_account_key_file
+            or self.service_account_key_json
+            or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         )
         if self.service_account_enabled and self.oauth21_enabled:
             raise ValueError(
@@ -493,3 +504,20 @@ def is_external_oauth21_provider() -> bool:
 def is_service_account_enabled() -> bool:
     """Check if service account (domain-wide delegation) mode is enabled."""
     return get_oauth_config().is_service_account_enabled()
+
+
+def is_wif_dwd_mode() -> bool:
+    """Return True when running with Workload Identity Federation + DWD (keyless auth).
+
+    WIF+DWD uses GOOGLE_APPLICATION_CREDENTIALS (a WIF config file) plus
+    GOOGLE_SERVICE_ACCOUNT_EMAIL for impersonation, rather than a SA key file.
+    In this mode the impersonation target is always caller-supplied per request,
+    so USER_GOOGLE_EMAIL must not be used as a global default or server instruction.
+    """
+    config = get_oauth_config()
+    return (
+        bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+        and not config.service_account_key_file
+        and not config.service_account_key_json
+        and bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+    )

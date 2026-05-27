@@ -1,0 +1,96 @@
+name: deploy
+run-name: ${{ inputs.environment || 'platform' }} (${{ github.ref_name }} deployed by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: environment
+        description: 'Environment to deploy to'
+        required: true
+
+# Permission can be added at job level or workflow level
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: write    # This is required for actions/checkout
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'platform' }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref_name }}
+      cancel-in-progress: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.branch || github.ref_name }}
+
+    - name: configure aws credentials
+      uses: aws-actions/configure-aws-credentials@v1.7.0
+      with:
+        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ex-iam-github-oidc-${{ vars.ENVIRONMENT || 'platform' }}
+        role-session-name: GitHub_to_AWS_via_FederatedOIDC
+        aws-region: ${{ vars.AWS_REGION }}
+      if: github.event_name != 'pull_request'
+
+    - name: get app repository name
+      run: echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+      if: github.event_name != 'pull_request'
+
+    - name: get github run number
+      run: echo "RUN_NUMBER=$GITHUB_RUN_NUMBER" >> $GITHUB_ENV
+      if: github.event_name != 'pull_request'
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+      if: github.event_name != 'pull_request'
+
+    - name: Login to GHCR Docker
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build, tag, and push app image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        APP_NAME: ${{ env.REPOSITORY_NAME }}
+        DOCKER_BUILDKIT: 1
+      run: |
+        docker build . \
+          --tag $ECR_REGISTRY/$APP_NAME:mcp-${{ github.sha }} \
+          --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+          --label org.opencontainers.image.source=$(git config --get remote.origin.url)
+
+        docker push \
+          $ECR_REGISTRY/$APP_NAME:mcp-${{ github.sha }}
+
+      if: github.event_name != 'pull_request'
+
+    - name: Generate a token
+      id: generate_token
+      uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+      with:
+        app_id: ${{ secrets.GH_APP_ID }}
+        private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+    - name: Invoke Infra GitOps pipeline
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ steps.generate_token.outputs.token }}
+        repository: Bark-com/helm-charts
+        event-type: deploy-helm-chart
+        client-payload: |-
+          {
+            "app_name": "${{ env.REPOSITORY_NAME }}",
+            "replacements": [
+              ".mcpSidecar.image.tag=\"mcp-${{ github.sha }}\""
+            ],
+            "message": "Deploying ${{ env.REPOSITORY_NAME }} from branch ${{ github.ref_name }}. (${{ github.actor }})"
+          }

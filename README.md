@@ -1305,6 +1305,75 @@ export DWD_ALLOWED_DOMAINS="corp.com,subsidiary.io"
 - If `DWD_ALLOWED_DOMAINS` is set, only emails whose domain appears in the comma-separated list are accepted; all others raise an authentication error.
 - If `DWD_ALLOWED_DOMAINS` is unset, any email accepted by the service account's delegation scope is allowed.
 
+### WIF + DWD Mode (Keyless Auth for AWS EKS)
+
+> **Note**: This mode enables keyless Google authentication from AWS EKS pods via GCP Workload Identity Federation (WIF), combined with Domain-Wide Delegation (DWD) to act on behalf of Workspace users — no service account JSON key file required.
+
+**How it works:**
+1. The EKS pod holds a Kubernetes projected service account token at `/var/run/secrets/tokens/gcp-sa-token`.
+2. `GOOGLE_APPLICATION_CREDENTIALS` points to a WIF config JSON (`wif-config.json`) that tells the Google Auth SDK to exchange that K8s token at GCP STS for short-lived federated credentials.
+3. The WIF config's `service_account_impersonation_url` field causes the federated credentials to impersonate the GCP service account specified by `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
+4. `google.auth.impersonated_credentials.Credentials` with `subject=<workspace_user_email>` performs DWD, producing a token that acts as the Workspace user.
+
+**Required environment variables:**
+
+| Variable | Description |
+|---|---|
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to the WIF config JSON (e.g. `/etc/gcp/wif-config.json`) |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Email of the GCP service account to impersonate (e.g. `my-sa@my-project.iam.gserviceaccount.com`) |
+| `USER_GOOGLE_EMAIL` | Default Workspace user to act on behalf of |
+
+**Enabling WIF + DWD mode:**
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/etc/gcp/wif-config.json"
+export GOOGLE_SERVICE_ACCOUNT_EMAIL="my-sa@my-project.iam.gserviceaccount.com"
+export USER_GOOGLE_EMAIL="user@yourdomain.com"
+uv run main.py
+```
+
+**Do NOT set** `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` or `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` alongside `GOOGLE_APPLICATION_CREDENTIALS` — the WIF path activates only when the key-file variables are absent.
+
+**Prerequisites:**
+1. A GCP Workload Identity Pool and Provider configured to trust your EKS cluster's OIDC issuer.
+2. A GCP service account with domain-wide delegation enabled in your Google Workspace Admin Console.
+3. The required OAuth scopes authorized for the service account's client ID in the Admin Console.
+4. A `wif-config.json` generated via `gcloud iam workload-identity-pools create-cred-config` with `--service-account-impersonation` pointing at the GCP SA.
+5. The EKS pod's `ServiceAccount` annotated to project the K8s token to `/var/run/secrets/tokens/gcp-sa-token`.
+
+**Kubernetes pod spec snippet:**
+
+```yaml
+env:
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: /etc/gcp/wif-config.json
+  - name: GOOGLE_SERVICE_ACCOUNT_EMAIL
+    value: my-sa@my-project.iam.gserviceaccount.com
+  - name: USER_GOOGLE_EMAIL
+    value: user@yourdomain.com
+volumeMounts:
+  - name: wif-config
+    mountPath: /etc/gcp
+  - name: gcp-sa-token
+    mountPath: /var/run/secrets/tokens
+volumes:
+  - name: wif-config
+    configMap:
+      name: wif-config
+  - name: gcp-sa-token
+    projected:
+      sources:
+        - serviceAccountToken:
+            path: gcp-sa-token
+            expirationSeconds: 3600
+            audience: <your-workload-identity-pool-audience>
+```
+
+**Incompatibilities (same as service account mode):**
+- Cannot be combined with `--single-user` mode.
+- Cannot be combined with `MCP_ENABLE_OAUTH21=true`.
+- Cannot be combined with `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` or `GOOGLE_SERVICE_ACCOUNT_KEY_JSON`.
+
 ### VS Code MCP Client Support
 
 > **✅ Recommended**: VS Code MCP extension properly supports the full MCP specification. **Always use HTTP transport mode** for proper OAuth 2.1 authentication.

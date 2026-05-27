@@ -445,6 +445,12 @@ def main():
         "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": os.getenv(
             "GOOGLE_SERVICE_ACCOUNT_KEY_FILE", "Not Set"
         ),
+        "GOOGLE_APPLICATION_CREDENTIALS": os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS", "Not Set"
+        ),
+        "GOOGLE_SERVICE_ACCOUNT_EMAIL": os.getenv(
+            "GOOGLE_SERVICE_ACCOUNT_EMAIL", "Not Set"
+        ),
     }
 
     for key, value in config_vars.items():
@@ -609,44 +615,76 @@ def main():
 
     # Service account mode startup validation
     if is_service_account_enabled():
-        user_email = os.getenv("USER_GOOGLE_EMAIL")
-        if not user_email:
-            safe_print("❌ Service account mode requires USER_GOOGLE_EMAIL to be set")
-            safe_print("   Set USER_GOOGLE_EMAIL to the domain user to impersonate")
-            sys.exit(1)
-        # Validate service account key material before advertising readiness
         sa_config = get_oauth_config()
-        try:
-            if sa_config.service_account_key_file:
-                with open(sa_config.service_account_key_file) as f:
-                    key_data = json.load(f)
-            else:
-                key_data = json.loads(sa_config.service_account_key_json)
-            required_fields = {"type", "project_id", "private_key", "client_email"}
-            missing = required_fields - set(key_data.keys())
-            if missing:
+        _wif_mode = (
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            and not sa_config.service_account_key_file
+            and not sa_config.service_account_key_json
+        )
+        if not _wif_mode:
+            # Traditional SA key-file/JSON mode: USER_GOOGLE_EMAIL is the single
+            # impersonation target and must be configured upfront.
+            user_email = os.getenv("USER_GOOGLE_EMAIL")
+            if not user_email:
                 safe_print(
-                    f"❌ Service account key missing required fields: "
-                    f"{', '.join(sorted(missing))}"
+                    "❌ Service account mode requires USER_GOOGLE_EMAIL to be set"
+                )
+                safe_print("   Set USER_GOOGLE_EMAIL to the domain user to impersonate")
+                sys.exit(1)
+        if _wif_mode:
+            # WIF mode: key material lives in the wif-config.json + GCP STS exchange.
+            # No local key file to validate — confirm the config file at least exists.
+            _wif_cfg_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if not os.path.isfile(_wif_cfg_path):
+                logger.error(
+                    "WIF+DWD startup error: GOOGLE_APPLICATION_CREDENTIALS file not found: %s",
+                    _wif_cfg_path,
                 )
                 sys.exit(1)
-            if key_data.get("type") != "service_account":
-                safe_print(
-                    f"❌ Service account key has unexpected type: "
-                    f"{key_data.get('type')!r}"
+            if not os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"):
+                logger.error(
+                    "WIF+DWD startup error: GOOGLE_SERVICE_ACCOUNT_EMAIL must be set when GOOGLE_APPLICATION_CREDENTIALS is configured"
                 )
                 sys.exit(1)
-        except FileNotFoundError as e:
-            safe_print(f"❌ Service account key file not found: {e}")
-            sys.exit(1)
-        except json.JSONDecodeError as e:
-            safe_print(f"❌ Service account key contains invalid JSON: {e}")
-            sys.exit(1)
-        except (IOError, OSError) as e:
-            safe_print(f"❌ Failed to read service account key: {e}")
-            sys.exit(1)
-        safe_print("🔐 Service account mode enabled (domain-wide delegation)")
-        safe_print(f"   Impersonating: {user_email}")
+            logger.info("WIF+DWD mode enabled (Workload Identity Federation)")
+            logger.info("  WIF config: %s", _wif_cfg_path)
+            logger.info("  SA email:   %s", os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+            safe_print("🔐 WIF + DWD mode enabled (Workload Identity Federation)")
+            safe_print(f"   WIF config: {_wif_cfg_path}")
+            safe_print(f"   SA email:   {os.getenv('GOOGLE_SERVICE_ACCOUNT_EMAIL')}")
+        else:
+            # Validate service account key material before advertising readiness
+            try:
+                if sa_config.service_account_key_file:
+                    with open(sa_config.service_account_key_file) as f:
+                        key_data = json.load(f)
+                else:
+                    key_data = json.loads(sa_config.service_account_key_json)
+                required_fields = {"type", "project_id", "private_key", "client_email"}
+                missing = required_fields - set(key_data.keys())
+                if missing:
+                    safe_print(
+                        f"❌ Service account key missing required fields: "
+                        f"{', '.join(sorted(missing))}"
+                    )
+                    sys.exit(1)
+                if key_data.get("type") != "service_account":
+                    safe_print(
+                        f"❌ Service account key has unexpected type: "
+                        f"{key_data.get('type')!r}"
+                    )
+                    sys.exit(1)
+            except FileNotFoundError as e:
+                safe_print(f"❌ Service account key file not found: {e}")
+                sys.exit(1)
+            except json.JSONDecodeError as e:
+                safe_print(f"❌ Service account key contains invalid JSON: {e}")
+                sys.exit(1)
+            except (IOError, OSError) as e:
+                safe_print(f"❌ Failed to read service account key: {e}")
+                sys.exit(1)
+            safe_print("🔐 Service account mode enabled (domain-wide delegation)")
+            safe_print(f"   Impersonating: {user_email}")
         safe_print("")
 
     backend = get_selected_backend()
