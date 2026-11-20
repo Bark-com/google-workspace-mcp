@@ -217,17 +217,39 @@ async def test_wif_subject_is_the_caller_email(wif_env):
 
 
 @pytest.mark.asyncio
-async def test_wif_widens_drive_file_scope_like_upstream_dwd(wif_env):
+async def test_wif_keeps_drive_file_scope_unwidened(wif_env):
+    # The Bark DWD client is authorized for drive.file, not full drive.
     captured, _ = _patch_wif_authentication(wif_env)
 
     await _authenticate(
         "alice@bark.com",
         tool_name="create_drive_file",
-        scopes=["https://www.googleapis.com/auth/drive.file"],
+        scopes=[
+            "https://www.googleapis.com/auth/documents",
+            "https://www.googleapis.com/auth/drive.file",
+        ],
     )
 
-    assert "https://www.googleapis.com/auth/drive" in captured["scopes"]
-    assert "https://www.googleapis.com/auth/drive.file" not in captured["scopes"]
+    assert captured["scopes"] == [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive.file",
+    ]
+
+
+def test_key_file_dwd_still_widens_drive_file_scope(wif_env):
+    # Upstream's key-file DWD path keeps upstream behaviour.
+    captured, _ = _patch_wif_authentication(wif_env)
+    wif_env.setattr(service_decorator, "is_wif_dwd_mode", lambda: False)
+
+    service_decorator._build_dwd_service(
+        "drive",
+        "v3",
+        "create_drive_file",
+        ["https://www.googleapis.com/auth/drive.file"],
+        "alice@bark.com",
+    )
+
+    assert captured["scopes"] == ["https://www.googleapis.com/auth/drive"]
 
 
 @pytest.mark.asyncio
