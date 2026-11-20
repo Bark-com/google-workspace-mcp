@@ -368,6 +368,46 @@ def _widen_drive_scope_for_dwd(scopes: List[str], tool_name: str) -> List[str]:
     return widened
 
 
+def _resolve_wif_dwd_subject(user_google_email: Optional[str], config) -> str:
+    """Return the DWD subject for Bark WIF+DWD mode, failing closed.
+
+    The subject is the caller-supplied email (set by the loopback-only Bark
+    wrapper from the user's verified identity), limited to DWD_ALLOWED_DOMAINS.
+    There is no default subject.
+    """
+    if not config.dwd_allowed_domains:
+        raise GoogleAuthenticationError(
+            "WIF+DWD mode requires DWD_ALLOWED_DOMAINS to be configured."
+        )
+    target_email = normalize_principal_email(user_google_email)
+    if not target_email:
+        raise GoogleAuthenticationError(
+            "WIF+DWD mode requires a valid user_google_email on every call."
+        )
+    _validate_dwd_domain(target_email, config)
+    return target_email
+
+
+def _build_dwd_service(
+    service_name: str,
+    service_version: str,
+    tool_name: str,
+    resolved_scopes: List[str],
+    target_email: str,
+) -> Tuple[Any, str]:
+    """Build a Google service impersonating ``target_email`` via domain-wide delegation."""
+    credentials = _get_service_account_credentials(
+        _widen_drive_scope_for_dwd(resolved_scopes, tool_name), target_email
+    )
+    service = build_google_service(service_name, service_version, credentials)
+    logger.info(
+        f"[{tool_name}] Authenticated {service_name} for "
+        f"{target_email} via service-account"
+    )
+    record_google_principal("service-account", target_email)
+    return service, target_email
+
+
 async def _authenticate_service(
     use_oauth21: bool,
     service_name: str,
@@ -385,31 +425,10 @@ async def _authenticate_service(
         Tuple of (service, actual_user_email)
     """
     if is_service_account_enabled() and is_wif_dwd_mode():
-        # Bark WIF+DWD: the DWD subject is the caller-supplied email (set by the
-        # loopback-only Bark wrapper from the user's verified identity), limited
-        # to DWD_ALLOWED_DOMAINS. There is no default subject; fail closed.
-        config = get_oauth_config()
-        if not config.dwd_allowed_domains:
-            raise GoogleAuthenticationError(
-                "WIF+DWD mode requires DWD_ALLOWED_DOMAINS to be configured."
-            )
-        target_email = normalize_principal_email(user_google_email)
-        if not target_email:
-            raise GoogleAuthenticationError(
-                "WIF+DWD mode requires a valid user_google_email on every call."
-            )
-        _validate_dwd_domain(target_email, config)
-
-        credentials = _get_service_account_credentials(
-            _widen_drive_scope_for_dwd(resolved_scopes, tool_name), target_email
+        target_email = _resolve_wif_dwd_subject(user_google_email, get_oauth_config())
+        return _build_dwd_service(
+            service_name, service_version, tool_name, resolved_scopes, target_email
         )
-        service = build_google_service(service_name, service_version, credentials)
-        logger.info(
-            f"[{tool_name}] Authenticated {service_name} for "
-            f"{target_email} via service-account (WIF)"
-        )
-        record_google_principal("service-account", target_email)
-        return service, target_email
 
     if is_service_account_enabled():
         canonical_email = _get_configured_user_google_email()
@@ -434,16 +453,9 @@ async def _authenticate_service(
                 )
             target_email = principal
 
-        credentials = _get_service_account_credentials(
-            _widen_drive_scope_for_dwd(resolved_scopes, tool_name), target_email
+        return _build_dwd_service(
+            service_name, service_version, tool_name, resolved_scopes, target_email
         )
-        service = build_google_service(service_name, service_version, credentials)
-        logger.info(
-            f"[{tool_name}] Authenticated {service_name} for "
-            f"{target_email} via service-account"
-        )
-        record_google_principal("service-account", target_email)
-        return service, target_email
 
     if use_oauth21:
         logger.debug(f"[{tool_name}] Using OAuth 2.1 flow")

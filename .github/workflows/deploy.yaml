@@ -26,9 +26,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'platform' }}
+    # One build per destination tag at a time, queued (never cancelled), so a
+    # second run for the same tag waits and then fails the "tag exists" guard
+    # instead of racing it from another branch.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref_name }}
-      cancel-in-progress: true
+      group: ${{ github.workflow }}-${{ inputs.environment || 'platform' }}-${{ inputs.image_tag }}
+      cancel-in-progress: false
 
     steps:
     - name: Checkout code
