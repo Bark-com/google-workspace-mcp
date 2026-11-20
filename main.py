@@ -471,6 +471,8 @@ def describe_credential_config() -> list[tuple[str, str, str]]:
         _client_secret_field(),
         _optional_field("GOOGLE_CLIENT_SECRET_PATH", path=True),
         _optional_field("GOOGLE_SERVICE_ACCOUNT_KEY_FILE", path=True),
+        _optional_field("GOOGLE_APPLICATION_CREDENTIALS", path=True),
+        _optional_field("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
         _optional_field("USER_GOOGLE_EMAIL"),
         _credentials_dir_field(),
     ]
@@ -530,6 +532,47 @@ def _restore_stdout() -> None:
 
     if captured:
         print(captured, end="", file=sys.stderr)
+
+
+def validate_wif_dwd_startup(ui: StartupDisplay, transport: str, host: str) -> None:
+    """Validate Bark WIF+DWD mode before advertising readiness.
+
+    WIF+DWD is keyless service-account impersonation where the DWD subject comes
+    from the caller. That is only safe behind the loopback-only Bark wrapper with
+    a domain allowlist, so both are enforced here and startup fails otherwise.
+    """
+    wif_config_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+    if not os.path.isfile(wif_config_path):
+        fatal(
+            ui,
+            "WIF+DWD credentials config not found",
+            f"GOOGLE_APPLICATION_CREDENTIALS={wif_config_path}",
+        )
+    allowed_domains = get_oauth_config().dwd_allowed_domains
+    if not allowed_domains:
+        fatal(
+            ui,
+            "WIF+DWD mode requires DWD_ALLOWED_DOMAINS",
+            "Set it to the Workspace domain(s) users may be impersonated in",
+        )
+    if transport == "streamable-http" and host not in _LOOPBACK_HOSTS:
+        fatal(
+            ui,
+            "WIF+DWD mode must bind to loopback",
+            f"Bind host is {host}; unset WORKSPACE_MCP_HOST so only the "
+            "co-located wrapper can reach the server",
+        )
+    ui.step("WIF + DWD mode enabled", "Workload Identity Federation")
+    ui.detail(f"service account {os.getenv('GOOGLE_SERVICE_ACCOUNT_EMAIL')}")
+    ui.detail(f"subject per request, domains {', '.join(allowed_domains)}")
+    # The startup screen is dropped when stderr is not a TTY (containers), so
+    # also log the mode for operators.
+    logger.info(
+        "WIF + DWD mode enabled: service account %s, bind %s, allowed domains %s",
+        os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
+        host,
+        ", ".join(allowed_domains),
+    )
 
 
 def main():
@@ -928,8 +971,15 @@ def main():
         os.environ["MCP_SINGLE_USER_MODE"] = "1"
         ui.step("Single-user mode enabled")
 
+    # Bark WIF+DWD startup validation (see validate_wif_dwd_startup).
+    from auth.oauth_config import is_wif_dwd_mode
+
+    wif_dwd_mode = is_service_account_enabled() and is_wif_dwd_mode()
+    if wif_dwd_mode:
+        validate_wif_dwd_startup(ui, args.transport, host)
+
     # Service account mode startup validation
-    if is_service_account_enabled():
+    if is_service_account_enabled() and not wif_dwd_mode:
         user_email = os.getenv("USER_GOOGLE_EMAIL")
         if not user_email:
             fatal(

@@ -551,6 +551,11 @@ async def resolve_folder_id(
     """
     Resolve a folder ID that might be a shortcut and ensure the final target is a folder.
     """
+    # "root" is the Drive API alias for My Drive. files().get("root") can 404 for
+    # domain-wide-delegated Workspace users, but "root" is always valid as a
+    # parent, so accept it without a lookup.
+    if folder_id == "root":
+        return "root"
     resolved_id, metadata = await resolve_drive_item(
         service,
         folder_id,
