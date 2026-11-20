@@ -396,9 +396,15 @@ def _build_dwd_service(
     target_email: str,
 ) -> Tuple[Any, str]:
     """Build a Google service impersonating ``target_email`` via domain-wide delegation."""
-    credentials = _get_service_account_credentials(
-        _widen_drive_scope_for_dwd(resolved_scopes, tool_name), target_email
+    # Bark WIF+DWD: request drive.file as-is. The Bark DWD client is authorized
+    # for drive.file but not full drive, so widening fails every Drive write with
+    # unauthorized_client (PENG-5694).
+    scopes = (
+        resolved_scopes
+        if is_wif_dwd_mode()
+        else _widen_drive_scope_for_dwd(resolved_scopes, tool_name)
     )
+    credentials = _get_service_account_credentials(scopes, target_email)
     service = build_google_service(service_name, service_version, credentials)
     logger.info(
         f"[{tool_name}] Authenticated {service_name} for "

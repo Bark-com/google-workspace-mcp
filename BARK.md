@@ -42,7 +42,11 @@ wrapper. In WIF mode the server:
 - ignores `USER_GOOGLE_EMAIL` completely (no default subject, no schema default,
   no server instructions), and fails a call that has no valid `user_google_email`;
 - allows `WORKSPACE_MCP_STATELESS_MODE=true` without OAuth 2.1, which also turns
-  off local file access.
+  off local file access;
+- requests `drive.file` as-is. Upstream's DWD path swaps it for full `drive`, which
+  the Bark DWD client is not authorized for in the Admin console, so every Drive
+  write failed with `unauthorized_client` (v2.6.0-bark.1). Tools that ask for full
+  `drive` themselves (`manage_comment`) still fail, as they did before v2.6.0.
 
 The Bark commit also accepts `"root"` as a folder without a Drive lookup
 (`gdrive.drive_helpers.resolve_folder_id`), because `files.get("root")` can 404 for
