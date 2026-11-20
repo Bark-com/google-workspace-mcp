@@ -16,6 +16,7 @@ from auth.oauth_config import (
     set_transport_mode,
     get_transport_mode,
     is_oauth21_enabled,
+    is_wif_dwd_mode,
 )
 
 # Server configuration. WORKSPACE_MCP_PORT is resolved lazily via PEP 562
@@ -39,9 +40,14 @@ def __getattr__(name: str) -> int:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# Disable USER_GOOGLE_EMAIL in OAuth 2.1 multi-user mode
+# Disable USER_GOOGLE_EMAIL in multi-user modes (OAuth 2.1 and Bark WIF+DWD).
+# In both the caller supplies the target email per request; a global default
+# would silently impersonate the wrong account and mislead the LLM through the
+# server instructions.
 USER_GOOGLE_EMAIL = (
-    None if is_oauth21_enabled() else os.getenv("USER_GOOGLE_EMAIL", None)
+    None
+    if (is_oauth21_enabled() or is_wif_dwd_mode())
+    else os.getenv("USER_GOOGLE_EMAIL", None)
 )
 
 # Re-export OAuth functions for backward compatibility

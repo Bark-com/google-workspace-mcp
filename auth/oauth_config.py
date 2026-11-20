@@ -20,6 +20,26 @@ from auth.client_secrets import get_client_secrets_path, load_client_secrets_fil
 logger = logging.getLogger(__name__)
 
 
+def is_wif_dwd_mode() -> bool:
+    """Return True when running keyless Workload Identity Federation + DWD (Bark).
+
+    WIF+DWD uses GOOGLE_APPLICATION_CREDENTIALS (an external_account config, e.g.
+    an EKS projected-token WIF config) plus GOOGLE_SERVICE_ACCOUNT_EMAIL, the
+    service account that is impersonated and that holds domain-wide delegation.
+    It is only active when no service account key is configured.
+
+    In this mode the DWD subject is always the caller-supplied user_google_email
+    (validated against DWD_ALLOWED_DOMAINS); USER_GOOGLE_EMAIL is never used.
+    Reads the environment directly so it is safe to call at import time.
+    """
+    return (
+        bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+        and bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+        and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE")
+        and not os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_JSON")
+    )
+
+
 _ASYMMETRIC_JWT_ALGORITHM_FAMILIES = {
     "ES": frozenset({"ES256", "ES256K", "ES384", "ES512", "ES521"}),
     "EdDSA": frozenset({"EdDSA"}),
@@ -222,9 +242,12 @@ class OAuthConfig:
         self.stateless_mode = (
             os.getenv("WORKSPACE_MCP_STATELESS_MODE", "false").lower() == "true"
         )
-        if self.stateless_mode and not self.oauth21_enabled:
+        self.wif_dwd_mode = is_wif_dwd_mode()
+        if self.stateless_mode and not self.oauth21_enabled and not self.wif_dwd_mode:
             raise ValueError(
-                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true"
+                "WORKSPACE_MCP_STATELESS_MODE requires MCP_ENABLE_OAUTH21=true "
+                "or WIF+DWD mode (GOOGLE_APPLICATION_CREDENTIALS + "
+                "GOOGLE_SERVICE_ACCOUNT_EMAIL)"
             )
 
         # Service account (domain-wide delegation) configuration
@@ -237,13 +260,22 @@ class OAuthConfig:
                 "GOOGLE_SERVICE_ACCOUNT_KEY_JSON, not both."
             )
         self.service_account_enabled = bool(
-            self.service_account_key_file or self.service_account_key_json
+            self.service_account_key_file
+            or self.service_account_key_json
+            or self.wif_dwd_mode
         )
         if self.service_account_enabled and self.oauth21_enabled:
             raise ValueError(
                 "Service account mode is incompatible with OAuth 2.1 mode. "
                 "Set GOOGLE_SERVICE_ACCOUNT_KEY_FILE or GOOGLE_SERVICE_ACCOUNT_KEY_JSON, "
                 "but not MCP_ENABLE_OAUTH21=true."
+            )
+
+        if self.wif_dwd_mode and self.trust_gateway_identity:
+            raise ValueError(
+                "WIF+DWD mode is incompatible with TRUST_GATEWAY_IDENTITY=true. "
+                "WIF+DWD trusts the caller-supplied user_google_email from a "
+                "loopback-only wrapper; do not combine it with gateway assertions."
             )
 
         # Optional per-request impersonation domain allowlist for service accounts.
