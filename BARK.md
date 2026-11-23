@@ -7,10 +7,13 @@ platform EKS cluster, behind the Bark wrapper
 in the same pod. The chart is `google-workspace-mcp/` in
 [Bark-com/helm-charts](https://github.com/Bark-com/helm-charts).
 
-The fork is upstream plus **one** Bark commit. Keep it that way: Bark docs live
-here and not in `README.md`, so upstream README changes never conflict.
+`bark` is the default branch and always holds what is deployed: upstream's
+history merged in, plus the Bark auth patch and a few Bark-owned files (the
+Dockerfile, `.python-version`, `.trivyignore`, `.github/`, this file). Keep the
+patch small: Bark docs live here and not in `README.md`, so upstream README
+changes never conflict. The 1.x `main` line is kept only as tag `legacy/main-1.x`.
 
-## What the Bark commit adds: WIF + DWD mode
+## What the Bark patch adds: WIF + DWD mode
 
 Upstream supports domain-wide delegation (DWD) only with a service-account key.
 Bark runs keyless: Workload Identity Federation (WIF) from EKS, impersonating a
@@ -74,29 +77,70 @@ because the server is not reachable on the pod IP.
 `.github/workflows/deploy.yaml` is **build-only**. It does not touch helm-charts.
 
 ```bash
-gh workflow run deploy.yaml -R Bark-com/google-workspace-mcp --ref <branch> \
-  -f environment=platform -f image_tag=v2.6.0-bark.1
+gh workflow run deploy.yaml -R Bark-com/google-workspace-mcp --ref bark \
+  -f environment=platform -f image_tag=v2.6.0-bark.3
 ```
 
 - Tags are `<upstream version>-bark.<n>`. The workflow refuses an existing tag,
   because the ECR repository is tag-mutable.
+- The image is built on the Bark golden image (`ghcr.io/bark-com/python`, the
+  Python line in `.python-version`) and must pass a Trivy HIGH/CRITICAL gate
+  before it is pushed. `image-scan.yml` runs the same build and gate on every PR
+  into `bark`.
+- Upstream's `valkey` extra is not installed: `valkey-glide` has no Alpine
+  wheel, and Bark runs stateless with OAuth 2.1 off, so it is never used.
 - Roll out by opening a helm-charts PR that sets `mcpSidecar.image.tag`, and roll
-  back by reverting it.
+  back by reverting it. Any merge into `bark` (an upstream upgrade especially)
+  needs a new `-bark.<n>` build before the helm-charts PR: nothing builds on merge.
 - Do not dispatch an older revision of this workflow (before v2.6.0-bark.1). It
   wrote `mcp-<sha>` straight into helm-charts and would deploy immediately.
 
+## Automated update PRs
+
+Nobody has to look for updates (PENG-5554). Each source opens a PR into `bark`,
+and Platform Engineering is asked to review it through `.github/CODEOWNERS`:
+
+| Source | What | When |
+|---|---|---|
+| Upstream bot (`upstream-watch.yml` in the wrapper repo) | the newest upstream release | weekly |
+| Dependabot | Python security fixes; GitHub Actions updates | as published; weekly |
+| Golden Images v1 | new golden base image on the same Python line | when golden images publish |
+
+The wrapper repo also scans both deployed images weekly (`scan-deployed.yml`)
+and opens an issue there on HIGH/CRITICAL findings. Nothing merges or deploys
+by itself.
+
+Golden-image PRs also add `close-gi-finding.yaml`. It cannot run here, because
+this public repo gets no org secrets, so close those DefectDojo findings by hand.
+
 ## Moving to a new upstream version
 
-1. Fetch the upstream tag. Push it as branch `upstream/<version>` without tags:
-   `git push --no-follow-tags origin <sha>:refs/heads/upstream/<version>`.
-2. Branch `bark/<version>` from it and re-apply this commit. Port it by hand where
-   upstream moved code; it touches `auth/oauth_config.py`,
+The bot does steps 1 and 2. To run it by hand, dispatch `upstream-watch.yml` in
+the wrapper repo with `tag=<version>`.
+
+1. The bot pushes branch `upstream/<version>`: the upstream release commit plus
+   one commit that makes `.github/` identical to `bark`'s. Workflows run from
+   the branch head, so upstream's own workflow files never run in this repo.
+   They would get org-wide AWS access through the shared GitHub OIDC role.
+2. It opens a PR from `upstream/<version>` into `bark`, labelled
+   `upstream-upgrade`, and lists upstream's `.github/` changes in a comment.
+   Those are never taken.
+3. Review what upstream changed. Check the release notes for changes to
+   service-account mode, the bind host and tool capabilities. The wrapper's
+   tiering is by tool name, so check renamed and new tools too.
+4. Resolve conflicts with the Bark patch in the PR, keeping the safety rules
+   above. Conflicts are most likely in `auth/oauth_config.py`,
    `auth/service_decorator.py`, `core/config.py`, `main.py`,
-   `gdrive/drive_helpers.py`, the `tests/**/test_*wif*` and `test_resolve_folder_root`
-   files, this file and the workflow.
-3. Open a PR into `upstream/<version>` that shows only the Bark commit. Check
-   upstream release notes for changes to service-account mode, the bind host and
-   tool capabilities. The wrapper's tiering is by tool name, so check renamed and
-   new tools too.
-4. After merge, build `<version>-bark.1` from `upstream/<version>`, then open the
-   helm-charts PR.
+   `gdrive/drive_helpers.py` and the Bark-owned files.
+5. Merge with **"Create a merge commit"**, never squash or rebase. The bot checks
+   whether upstream's release commit is an ancestor of `bark`; a squash breaks
+   that check and every later upgrade.
+6. Build `<version>-bark.1` from `bark`, then open the helm-charts PR.
+
+## Workflows
+
+Upstream's own workflows (docker-publish, publish-mcp-registry, helm-publish,
+check-maintainer-edits) are deleted on `bark` and disabled in the repository
+settings for every other ref. Never re-enable them: some publish images or
+request cloud credentials. `pytest.yml`, `ruff.yml`, `image-scan.yml` and
+`deploy.yaml` are the only workflows that should run.
