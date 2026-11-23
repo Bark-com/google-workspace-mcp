@@ -110,8 +110,10 @@ The wrapper repo also scans both deployed images weekly (`scan-deployed.yml`)
 and opens an issue there on HIGH/CRITICAL findings. Nothing merges or deploys
 by itself.
 
-Golden-image PRs also add `close-gi-finding.yaml`. It cannot run here, because
-this public repo gets no org secrets, so close those DefectDojo findings by hand.
+`close-gi-finding.yaml` is the golden-images template, committed here by hand:
+golden-images' App cannot push workflow files, so its PRs must find it present.
+It cannot run here, because this public repo gets no org secrets, so close those
+DefectDojo findings by hand.
 
 ## Moving to a new upstream version
 
@@ -143,6 +145,7 @@ Upstream's own workflows (docker-publish, publish-mcp-registry, helm-publish,
 check-maintainer-edits) are deleted on `bark` and disabled in the repository
 settings for every other ref. Never re-enable them: some publish images or
 request cloud credentials. `pytest.yml`, `bark-ruff.yml`, `image-scan.yml` and
-`deploy.yaml` are the only workflows that should run. Upstream's `ruff.yml` is
+`deploy.yaml` are the only workflows that should run (`close-gi-finding.yaml`
+runs when a golden-image PR merges and is expected to fail). Upstream's `ruff.yml` is
 kept unchanged because upstream's tests check its structure, but it triggers
 only for `main`, which this fork no longer has.
