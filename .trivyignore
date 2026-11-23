@@ -5,19 +5,23 @@
 # golden-image or upstream bump.
 
 # ---------------------------------------------------------------------------
-# Day-one entries (2026-11-23). Every one is in the Bark golden base image
+# Day-one entries (2026-11-23). Every one comes from the Bark golden base image
 # (ghcr.io/bark-com/python:<ver>-alpine-3.22.4-nonroot), not in this repo's
-# code or its uv.lock. They are fixed by a golden-image rebuild, which arrives
+# code or its uv.lock. Except the CPython rows below, they are fixed by a golden-image rebuild, which arrives
 # here as a golden-image-update PR; golden-images v1 builds were last green on
 # 2026-11-04. REVIEW BY 2026-12-07: on every golden-image bump, rerun Trivy
 # with this file emptied and delete each entry that no longer reports.
 
-# --- Alpine `python3` placeholder package (false positives) -----------------
+# --- CPython: rows from the golden image's `python3` placeholder package ----
 # The golden image registers a virtual apk package `python3` versioned "3.12"
-# so apk does not pull the system Python; the real interpreter is the golden
-# build in /usr/local. Trivy matches the placeholder against old Alpine python3
-# advisories (fixed versions like 3.6.8-r1 are lower than "3.12"). Not code
-# that exists in the image.
+# so apk does not pull Alpine's system Python. The interpreter this image runs
+# is the golden build in /usr/local: 3.12.12 (golden PYTHON_3_12_VERSION; latest 3.12.16).
+# Trivy has no target for that interpreter. These rows, matched against the
+# placeholder, are its only CPython signal, and they never clear by ID (the
+# placeholder stays "3.12"), so interpreter currency has to be tracked by the
+# golden-images Python version, not by this scan.
+#
+# False positives: Alpine fixed these at or below 3.12.12.
 CVE-2015-20107
 CVE-2019-16056
 CVE-2019-20907
@@ -28,20 +32,39 @@ CVE-2022-45061
 CVE-2024-12254
 CVE-2024-12718
 CVE-2024-6232
-CVE-2024-7592
 CVE-2024-9287
 CVE-2025-4138
-CVE-2025-4517
+
+# ACCEPTED RISK (user decision 2026-11-23, PENG-5554): real for this image's
+# CPython 3.12.12, which golden images have pinned since 2026-06-26. Fixed only
+# by a golden-images PYTHON_3_12_VERSION bump, which then arrives here as a
+# golden-image-update PR. REVIEW BY 2026-12-07.
+# Fixed upstream, not in 3.12.12:
+# tarfile extraction filter bypass; fixed in 3.12.14
 CVE-2026-11940
-CVE-2026-15308
-CVE-2026-19445
-CVE-2026-19553
+# http.cookies control characters; fixed in 3.12.14
 CVE-2026-3644
-CVE-2026-4224
-CVE-2026-4786
-CVE-2026-6100
-CVE-2026-7210
+# server-side SSLContext use-after-free with sni_callback; fixed in 3.12.15
+CVE-2026-19445
+# tarfile file modification via crafted archives; fixed in 3.12.15
 CVE-2026-82049
+# No fixed version listed (may affect 3.12.12):
+# http.cookies CPU use
+CVE-2024-7592
+# tarfile realpath overflow
+CVE-2025-4517
+# HTML parser CPU DoS
+CVE-2026-15308
+# SSLContext.wrap_bio() hostname check
+CVE-2026-19553
+# XML DTD stack overflow
+CVE-2026-4224
+# webbrowser.open() command injection
+CVE-2026-4786
+# decompression use-after-free
+CVE-2026-6100
+# Expat XML DoS
+CVE-2026-7210
 
 # --- Golden image build tooling: poetry venv (dulwich, filelock, poetry,
 # virtualenv) and setuptools 70.3.0. Not installed in or imported by the app;
