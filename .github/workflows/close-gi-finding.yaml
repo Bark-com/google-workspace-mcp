@@ -1,0 +1,32 @@
+name: close-gi-defectdojo-finding
+run-name: Close DefectDojo Finding on Golden Image PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  close-finding:
+    runs-on: ubuntu-latest
+    if:
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'golden-image-update-')
+    steps:
+      - name: Generate token for DefectDojo dispatch
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a
+        with:
+          app_id: ${{ secrets.GH_APP_ID }}
+          private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Dispatch to DefectDojo to close finding
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+          repository: Bark-com/defectdojo
+          event-type: gi-golden-image-pr-merged
+          client-payload: |-
+            {
+              "pr_url": "${{ github.event.pull_request.html_url }}",
+              "app": "${{ github.event.repository.name }}"
+            }
