@@ -1,0 +1,36 @@
+name: Ruff (bark)
+
+# Bark-owned lint check for PRs into and pushes to `bark` (PENG-5554).
+# Upstream's ruff.yml is kept unchanged (its tests pin its structure) but only
+# triggers for `main`, which this fork no longer has, so it never runs here.
+# Unlike upstream's, this has no autofix job, so nothing ever pushes to bot
+# branches.
+on:
+  pull_request:
+    branches: [ bark ]
+  push:
+    branches: [ bark ]
+
+permissions:
+  contents: read
+
+env:
+  # Same pin as upstream's ruff.yml and the `ruff` dev dependency.
+  RUFF_VERSION: '0.15.22'
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Validate
+      # uvx runs ruff in an isolated environment, without the project's build
+      # backend or pyproject.toml hooks.
+      run: |
+        uvx ruff@${{ env.RUFF_VERSION }} check
+        uvx ruff@${{ env.RUFF_VERSION }} format --check
