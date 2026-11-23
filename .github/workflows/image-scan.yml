@@ -1,0 +1,48 @@
+name: Image scan
+
+# Builds the sidecar image and runs the same Trivy HIGH/CRITICAL gate as
+# deploy.yaml on every PR into `bark` (upstream upgrades, Dependabot and
+# golden-image PRs included), so a broken build or a new finding shows up
+# before merge. Never pushes. Bark-owned (PENG-5554, see BARK.md).
+on:
+  pull_request:
+    branches: [ bark ]
+
+permissions:
+  contents: read
+  packages: read   # pull the private golden base image from GHCR
+
+concurrency:
+  group: image-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          docker build . \
+            --build-arg PYTHON_VERSION=$(cat .python-version) \
+            --tag google-workspace-mcp:pr-${{ github.event.pull_request.number }}
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: google-workspace-mcp:pr-${{ github.event.pull_request.number }}
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+          timeout: 15m0s

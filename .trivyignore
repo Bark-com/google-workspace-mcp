@@ -1,0 +1,5 @@
+# Trivy ignore list for the sidecar image (PENG-5554). Used by deploy.yaml,
+# image-scan.yml and the wrapper repo's weekly scan of the deployed image.
+# Add an entry only when no fixed version exists, with a reason and a review
+# date; remove it once a fix lands. Re-check the whole list on every
+# golden-image or upstream bump.
