@@ -3,3 +3,85 @@
 # Add an entry only when no fixed version exists, with a reason and a review
 # date; remove it once a fix lands. Re-check the whole list on every
 # golden-image or upstream bump.
+
+# ---------------------------------------------------------------------------
+# Day-one entries (2026-11-23). Every one is in the Bark golden base image
+# (ghcr.io/bark-com/python:<ver>-alpine-3.22.4-nonroot), not in this repo's
+# code or its uv.lock. They are fixed by a golden-image rebuild, which arrives
+# here as a golden-image-update PR; golden-images v1 builds were last green on
+# 2026-11-04. REVIEW BY 2026-12-07: on every golden-image bump, rerun Trivy
+# with this file emptied and delete each entry that no longer reports.
+
+# --- Alpine `python3` placeholder package (false positives) -----------------
+# The golden image registers a virtual apk package `python3` versioned "3.12"
+# so apk does not pull the system Python; the real interpreter is the golden
+# build in /usr/local. Trivy matches the placeholder against old Alpine python3
+# advisories (fixed versions like 3.6.8-r1 are lower than "3.12"). Not code
+# that exists in the image.
+CVE-2015-20107
+CVE-2019-16056
+CVE-2019-20907
+CVE-2019-5010
+CVE-2021-29921
+CVE-2021-3177
+CVE-2022-45061
+CVE-2024-12254
+CVE-2024-12718
+CVE-2024-6232
+CVE-2024-7592
+CVE-2024-9287
+CVE-2025-4138
+CVE-2025-4517
+CVE-2026-11940
+CVE-2026-15308
+CVE-2026-19445
+CVE-2026-19553
+CVE-2026-3644
+CVE-2026-4224
+CVE-2026-4786
+CVE-2026-6100
+CVE-2026-7210
+CVE-2026-82049
+
+# --- Golden image build tooling: poetry venv (dulwich, filelock, poetry,
+# virtualenv) and setuptools 70.3.0. Not installed in or imported by the app;
+# never runs on the request path.
+CVE-2026-42305
+GHSA-8mcx-5rqc-vhmf
+CVE-2026-112940
+CVE-2026-34591
+CVE-2025-47273
+CVE-2026-102925
+CVE-2026-102930
+CVE-2026-102937
+CVE-2026-113718
+CVE-2026-113722
+CVE-2026-113723
+CVE-2026-113725
+CVE-2026-113726
+CVE-2026-113732
+CVE-2026-113776
+
+# --- Golden image `task` build runner (/usr/local/bin/task): Go stdlib and
+# modules statically linked into a build-time tool nothing here invokes.
+CVE-2026-116587
+CVE-2026-63209
+CVE-2026-56854
+CVE-2026-46600
+CVE-2026-78661
+CVE-2026-78669
+CVE-2026-56851
+CVE-2026-56852
+CVE-2026-84304
+CVE-2026-84445
+GHSA-hrxh-6v49-42gf
+CVE-2026-111943
+CVE-2026-33818
+CVE-2026-56853
+CVE-2026-39821
+CVE-2026-56858
+CVE-2026-56859
+CVE-2026-56860
+CVE-2026-56862
+CVE-2026-97031
+CVE-2026-78667
