@@ -1,11 +1,25 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Bark-owned (PENG-5554, see BARK.md). Runs against the default branch `bark`.
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Python deps: security updates only. open-pull-requests-limit 0 turns off
+  # routine version-update PRs but keeps Dependabot security updates (CVE
+  # fixes). Routine bumps arrive with each upstream release instead, so our
+  # uv.lock rarely conflicts with upstream's in upgrade PRs.
+  - package-ecosystem: "uv"
+    directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
+
+  # Bark's own workflows (upstream's are deleted on `bark`).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    pull-request-branch-name:
+      separator: "-"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
