@@ -37,6 +37,14 @@ jobs:
             --build-arg PYTHON_VERSION=$(cat .python-version) \
             --tag google-workspace-mcp:pr-${{ github.event.pull_request.number }}
 
+      - name: Smoke-test the image
+        # The app's deps import from the golden venv, both by `python` on PATH
+        # and by upstream's /app/.venv/bin/python path (kept as a symlink).
+        run: |
+          img=google-workspace-mcp:pr-${{ github.event.pull_request.number }}
+          docker run --rm --entrypoint /bin/sh "$img" -c \
+            'python -c "import fastmcp, main" >/dev/null && /app/.venv/bin/python -c "import fastmcp; print(\"ok\")"'
+
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
