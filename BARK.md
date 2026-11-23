@@ -123,7 +123,7 @@ the wrapper repo with `tag=<version>`.
    the branch head, so upstream's own workflow files never run in this repo.
    They would get org-wide AWS access through the shared GitHub OIDC role.
 2. It opens a PR from `upstream/<version>` into `bark`, labelled
-   `upstream-upgrade`, and lists upstream's `.github/` changes in a comment.
+   `upstream-upgrade`, and lists upstream's `.github/` changes in the PR description.
    Those are never taken.
 3. Review what upstream changed. Check the release notes for changes to
    service-account mode, the bind host and tool capabilities. The wrapper's

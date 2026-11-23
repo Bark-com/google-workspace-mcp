@@ -8,7 +8,7 @@ ARG PYTHON_VERSION
 FROM ghcr.io/bark-com/python:${PYTHON_VERSION}-alpine-3.22.4-nonroot
 
 # WORKDIR is already /app, uv and curl are already installed, and PATH points
-# at the golden image's pre-created venv (/venv), so `uv sync` installs into
+# at the golden image's pre-created venv (/venv/app, via UV_PROJECT_ENVIRONMENT), so `uv sync` installs into
 # it. There is no /app/.venv here. COPY defaults to root:root, hence --chown.
 
 # musl 1.2.5-r13 fixes CVE-2026-107891 (HIGH, libc, on the request path); the
