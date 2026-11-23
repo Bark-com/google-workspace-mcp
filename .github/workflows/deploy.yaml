@@ -94,20 +94,37 @@ jobs:
         fi
       if: github.event_name != 'pull_request'
 
-    - name: Build, tag, and push app image to Amazon ECR
+    - name: Build app image
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         APP_NAME: ${{ env.REPOSITORY_NAME }}
         DOCKER_BUILDKIT: 1
       run: |
         docker build . \
+          --build-arg PYTHON_VERSION=$(cat .python-version) \
           --tag $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG \
           --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
           --label org.opencontainers.image.source=$(git config --get remote.origin.url)
+        echo "IMAGE=$ECR_REGISTRY/$APP_NAME:$IMAGE_TAG" >> $GITHUB_ENV
 
-        docker push \
-          $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG
+      if: github.event_name != 'pull_request'
 
-        echo "Pushed $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG from $(git rev-parse HEAD)" >> $GITHUB_STEP_SUMMARY
+    # Gate: no push with HIGH/CRITICAL findings not covered by .trivyignore
+    # (PENG-5554). Pinned by commit: this job holds ECR push credentials.
+    - name: Scan image for vulnerabilities
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        image-ref: ${{ env.IMAGE }}
+        format: table
+        exit-code: "1"
+        severity: HIGH,CRITICAL
+        trivyignores: .trivyignore
+        timeout: 15m0s
+      if: github.event_name != 'pull_request'
+
+    - name: Push app image to Amazon ECR
+      run: |
+        docker push "$IMAGE"
+        echo "Pushed $IMAGE from $(git rev-parse HEAD)" >> $GITHUB_STEP_SUMMARY
 
       if: github.event_name != 'pull_request'

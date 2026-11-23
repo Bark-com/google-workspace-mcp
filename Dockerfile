@@ -1,33 +1,41 @@
-FROM python:3.13-slim
+# syntax=docker/dockerfile:1
+# Bark-owned (see BARK.md): upstream's python:3.13-slim base is replaced by the
+# Bark golden image. CI builds pass the Python version from .python-version:
+#   docker build --build-arg PYTHON_VERSION=$(cat .python-version) .
+# .python-version is the golden-images v1 bump target. Golden images have no
+# 3.13 line and upstream supports 3.11-3.13, so this stays on the 3.12 line.
+# The default only keeps plain `docker build .` and docker-compose working;
+# keep it equal to .python-version.
+ARG PYTHON_VERSION=3.12.12
+FROM ghcr.io/bark-com/python:${PYTHON_VERSION}-alpine-3.22.4-nonroot
 
-WORKDIR /app
+# WORKDIR is already /app, uv and curl are already installed, and PATH points
+# at the golden image's pre-created venv (/venv/app, via UV_PROJECT_ENVIRONMENT), so `uv sync` installs into
+# it. COPY defaults to root:root, hence --chown.
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# musl 1.2.5-r13 fixes CVE-2026-107891 (HIGH, libc, on the request path); the
+# golden image still ships r12. Drop this once a golden-image bump carries it.
+USER root
+RUN apk upgrade --no-cache musl musl-utils
 
-# Install uv for faster dependency management
-RUN pip install --no-cache-dir uv
-
-COPY . .
+USER bark
+COPY --chown=bark:bark . .
 
 # Install Python dependencies using uv sync
 # --extra otel ships the OpenTelemetry SDK/exporter so tracing can be enabled at
 # runtime via OTEL_* env vars; it stays a no-op unless an OTLP endpoint is set.
-# --extra valkey backs WORKSPACE_MCP_OAUTH_PROXY_STORAGE_BACKEND=valkey.
-RUN uv sync --frozen --no-dev --extra disk --extra otel --extra valkey
+# Upstream also installs --extra valkey (WORKSPACE_MCP_OAUTH_PROXY_STORAGE_BACKEND
+# =valkey). It is left out: valkey-glide has no musllinux (Alpine) wheel, and
+# Bark runs stateless with OAuth 2.1 off, so that storage backend is never used.
+RUN uv sync --frozen --no-dev --compile-bytecode --extra disk --extra otel
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
+# Upstream's image (and its helm-chart/ in this repo) runs /app/.venv/bin/python.
+# Point that path at the golden venv so anything still using it keeps working.
+RUN ln -sfn /venv/app /app/.venv
 
 # Give read and write access to the store_creds volume
 RUN mkdir -p /app/store_creds \
-    && chown -R app:app /app/store_creds \
     && chmod 755 /app/store_creds
-
-USER app
 
 # Expose port (use default of 8000 if PORT not set)
 EXPOSE 8000
@@ -45,4 +53,4 @@ ENV TOOLS=""
 
 # Use entrypoint for the base command and CMD for args
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["exec /app/.venv/bin/python main.py --transport streamable-http ${TOOL_TIER:+--tool-tier \"$TOOL_TIER\"} ${TOOLS:+--tools $TOOLS}"]
+CMD ["exec python main.py --transport streamable-http ${TOOL_TIER:+--tool-tier \"$TOOL_TIER\"} ${TOOLS:+--tools $TOOLS}"]
